@@ -16,7 +16,7 @@ app.get('/api/get-episode', async (req, res) => {
     const { anime, episode } = req.query;
 
     if (!anime || !episode) {
-        return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
+        return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنبمي ورقم الحلقة' });
     }
 
     const formattedAnime = anime.trim().toLowerCase().replace(/\s+/g, '-');
@@ -26,10 +26,19 @@ app.get('/api/get-episode', async (req, res) => {
 
     let browser = null;
     try {
+        // تهيئة المتصفح مع معلمات منع التعارض والأمان
+        const executablePath = await chromium.executablePath();
+        
         browser = await puppeteer.launch({
-            args: chromium.args,
+            args: [
+                ...chromium.args,
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process'
+            ],
             defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
+            executablePath: executablePath,
             headless: chromium.headless,
         });
 
