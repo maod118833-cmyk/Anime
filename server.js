@@ -21,7 +21,11 @@ app.get('/api/get-episode', async (req, res) => {
         return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
     }
 
-    console.log(`[+] جاري البحث عن: ${anime} - الحلقة ${episode}`);
+    // تحويل اسم الأنمي لصيغة الرابط المقبولة في Animenest (مثل: death-note)
+    const formattedAnime = anime.trim().toLowerCase().replace(/\s+/g, '-');
+    const targetUrl = `https://www.animenest.co/anime/${formattedAnime}/episode/${episode}`;
+
+    console.log(`[+] جاري الجلب من الرابط: ${targetUrl}`);
 
     let browser = null;
     try {
@@ -38,16 +42,13 @@ app.get('/api/get-episode', async (req, res) => {
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
 
-        // 1. رابط تجريبي للصفحة
-        const targetUrl = `https://example.com/anime/${encodeURIComponent(anime)}/episode/${episode}`;
-        
-        // 2. الانتقال إلى الصفحة
+        // الانتقال لصفحة الحلقة
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
-        // 3. استخراج رابط الفيديو
+        // استخراج رابط المشغل من iframe
         const streamUrl = await page.evaluate(() => {
-            const videoElement = document.querySelector('video');
-            return videoElement ? videoElement.src : null;
+            const iframeElement = document.querySelector('iframe');
+            return iframeElement ? iframeElement.src : null;
         });
 
         await browser.close();
