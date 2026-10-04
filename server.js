@@ -42,17 +42,36 @@ app.get('/api/get-episode', async (req, res) => {
         });
 
         const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
 
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        // تحميل الصفحة والانتظار حتى استقرار حركة الشبكة
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 35000 }).catch(() => null);
 
-        // 📍 هنا التعديل: الانتظار حتى يظهر المشغل في الصفحة (بحد أقصى 10 ثوانٍ)
-        await page.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
+        let streamUrl = null;
 
-        const streamUrl = await page.evaluate(() => {
-            const iframeElement = document.querySelector('iframe');
-            return iframeElement ? iframeElement.src : null;
-        });
+        // 🔄 محاولة البحث عن الرابط الصحيح حتى 5 مرات مع انتظار بين كل محاولة
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            streamUrl = await page.evaluate(() => {
+                const iframes = Array.from(document.querySelectorAll('iframe'));
+                for (const iframe of iframes) {
+                    const src = iframe.src || iframe.getAttribute('data-src');
+                    // التقط أي iframe يحتوي على سيرفر فيديو معروف وليس إعلاناً
+                    if (src && (src.includes('4shared') || src.includes('redload') || src.includes('embed') || src.includes('stream') || src.includes('file'))) {
+                        return src;
+                    }
+                }
+                // إذا لم يجد سيرفر مخصص، يرجع أول iframe متاح
+                return iframes.length > 0 ? (iframes[0].src || iframes[0].getAttribute('data-src')) : null;
+            });
+
+            if (streamUrl && streamUrl !== 'about:blank') {
+                console.log(`[+] تم العثور على الرابط في المحاولة رقم ${attempt}: ${streamUrl}`);
+                break;
+            }
+
+            // انتظار ثانية ونصف قبل المحاولة التالية
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        }
 
         await browser.close();
 
