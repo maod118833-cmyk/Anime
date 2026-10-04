@@ -1,9 +1,7 @@
 const express = require('express');
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cors = require('cors');
-
-puppeteer.use(StealthPlugin());
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 app.use(cors());
@@ -21,7 +19,6 @@ app.get('/api/get-episode', async (req, res) => {
         return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
     }
 
-    // تحويل اسم الأنمي لصيغة الرابط المقبولة في Animenest
     const formattedAnime = anime.trim().toLowerCase().replace(/\s+/g, '-');
     const targetUrl = `https://www.animenest.co/anime/${formattedAnime}/episode/${episode}`;
 
@@ -30,22 +27,17 @@ app.get('/api/get-episode', async (req, res) => {
     let browser = null;
     try {
         browser = await puppeteer.launch({
-            headless: "new",
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--single-process'
-            ]
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
 
-        // الانتقال لصفحة الحلقة
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-        // استخراج رابط المشغل من iframe
         const streamUrl = await page.evaluate(() => {
             const iframeElement = document.querySelector('iframe');
             return iframeElement ? iframeElement.src : null;
@@ -70,5 +62,3 @@ app.get('/api/get-episode', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-// Re-triggering build for Chrome binary installation test
