@@ -16,7 +16,7 @@ app.get('/api/get-episode', async (req, res) => {
     const { anime, episode } = req.query;
 
     if (!anime || !episode) {
-        return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنبمي ورقم الحلقة' });
+        return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
     }
 
     const formattedAnime = anime.trim().toLowerCase().replace(/\s+/g, '-');
@@ -26,7 +26,6 @@ app.get('/api/get-episode', async (req, res) => {
 
     let browser = null;
     try {
-        // تهيئة المتصفح مع معلمات منع التعارض والأمان
         const executablePath = await chromium.executablePath();
         
         browser = await puppeteer.launch({
@@ -46,6 +45,9 @@ app.get('/api/get-episode', async (req, res) => {
         await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
 
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        // 📍 هنا التعديل: الانتظار حتى يظهر المشغل في الصفحة (بحد أقصى 10 ثوانٍ)
+        await page.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
 
         const streamUrl = await page.evaluate(() => {
             const iframeElement = document.querySelector('iframe');
