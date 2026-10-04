@@ -21,7 +21,7 @@ app.get('/api/get-episode', async (req, res) => {
         return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
     }
 
-    // تحويل اسم الأنمي لصيغة الرابط المقبولة في Animenest (مثل: death-note)
+    // تحويل اسم الأنمي لصيغة الرابط المقبولة في Animenest
     const formattedAnime = anime.trim().toLowerCase().replace(/\s+/g, '-');
     const targetUrl = `https://www.animenest.co/anime/${formattedAnime}/episode/${episode}`;
 
@@ -70,3 +70,5 @@ app.get('/api/get-episode', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// Re-triggering build for Chrome binary installation test
