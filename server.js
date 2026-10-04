@@ -11,51 +11,61 @@ app.use(cors());
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('🚀 سيرفر جلب أنمي ستريم يعمل بنجاح!');
+    res.send('🚀 سيرفر جلب أنمي ستريم يعمل بنجاح');
 });
 
 app.get('/api/get-episode', async (req, res) => {
-  const { anime, episode } = req.query;
+    const { anime, episode } = req.query;
 
-  if (!anime || !episode) {
-    return res.status(400).json({ success: false, message: 'يرجى تقديم اسم الأنمي ورقم الحلقة' });
-  }
+    if (!anime || !episode) {
+        return res.status(400).json({ success: false, error: 'يرجى تزويد اسم الأنمي ورقم الحلقة' });
+    }
 
-  console.log(`[+] جاري البحث عن: ${anime} - الحلقة ${episode}`);
+    console.log(`[+] جاري البحث عن: ${anime} - الحلقة ${episode}`);
 
-  let browser = null;
-  try {
-    browser = await puppeteer.launch({
-      headless: "new",
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--single-process'
-      ]
-    });
+    let browser = null;
+    try {
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process'
+            ]
+        });
 
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1');
 
-    const streamUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+        // 1. رابط تجريبي للصفحة
+        const targetUrl = `https://example.com/anime/${encodeURIComponent(anime)}/episode/${episode}`;
+        
+        // 2. الانتقال إلى الصفحة
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
-    await browser.close();
+        // 3. استخراج رابط الفيديو
+        const streamUrl = await page.evaluate(() => {
+            const videoElement = document.querySelector('video');
+            return videoElement ? videoElement.src : null;
+        });
 
-    return res.json({
-      success: true,
-      anime: anime,
-      episode: episode,
-      streamUrl: streamUrl
-    });
+        await browser.close();
 
-  } catch (error) {
-    if (browser) await browser.close();
-    console.error('Err:', error);
-    return res.status(500).json({ success: false, error: error.message });
-  }
+        return res.json({
+            success: true,
+            anime: anime,
+            episode: episode,
+            streamUrl: streamUrl
+        });
+
+    } catch (error) {
+        if (browser) await browser.close();
+        console.error('Err:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
