@@ -9,7 +9,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 🧠 إعادة استخدام المتصفح لزيادة السرعة
 let globalBrowser = null;
 
 async function getBrowserInstance() {
@@ -38,16 +37,13 @@ async function getBrowserInstance() {
   return globalBrowser;
 }
 
-// 🟢 فحص صحة الخادم
 app.get('/', (req, res) => {
   res.json({ success: true, message: '🚀 OtakuHub Backend Server is Running!' });
 });
 
-// 🎬 API جلب رابط الحلقة المتوافق مع التطبيق
 app.get('/api/get-episode', async (req, res) => {
   const { anime, episode, targetUrl } = req.query;
 
-  // حدد الرابط المستهدف: إما المرسل مباشرة من التطبيق أو بناء رابط تلقائي
   let finalUrl = targetUrl;
   if (!finalUrl) {
     if (!anime || !episode) {
@@ -62,29 +58,20 @@ app.get('/api/get-episode', async (req, res) => {
     const browser = await getBrowserInstance();
     page = await browser.newPage();
 
-    // ⚡ تسريع التصفح وحجب الصور والإعلانات الثقيلة
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
-    await page.goto(finalUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    
+    // ⏳ زيادة مهلة الانتظار حتى اكتمال تحميل عناصر الشبكة
+    await page.goto(finalUrl, { waitUntil: 'networkidle2', timeout: 35000 });
 
     let streamUrl = null;
 
-    // 🔄 البحث الذكي عن الـ iframe الخاص بمشغل الفيديو
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // 🔄 محاولة البحث عن المشغل مع الانتظار
+    for (let attempt = 1; attempt <= 5; attempt++) {
       streamUrl = await page.evaluate(() => {
         const iframes = Array.from(document.querySelectorAll('iframe'));
         for (const iframe of iframes) {
-          const src = iframe.src || iframe.getAttribute('data-src');
-          if (src && (src.includes('embed') || src.includes('player') || src.includes('stream') || src.includes('http'))) {
+          const src = iframe.src || iframe.getAttribute('data-src') || iframe.getAttribute('src');
+          if (src && (src.includes('embed') || src.includes('player') || src.includes('stream') || src.startsWith('http'))) {
             return src;
           }
         }
@@ -92,7 +79,7 @@ app.get('/api/get-episode', async (req, res) => {
       });
 
       if (streamUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
     await page.close();
@@ -100,8 +87,8 @@ app.get('/api/get-episode', async (req, res) => {
     if (streamUrl) {
       return res.json({
         success: true,
-        anime: anime || 'Dynamic',
-        episode: episode || 'Dynamic',
+        anime: anime || 'DirectLink',
+        episode: episode || 'DirectLink',
         streamUrl: streamUrl,
       });
     } else {
@@ -115,7 +102,6 @@ app.get('/api/get-episode', async (req, res) => {
   }
 });
 
-// 🚀 تشغيل الخادم
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
