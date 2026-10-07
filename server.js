@@ -10,14 +10,15 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// إعداد التخزين المؤقت (Cache) لمدة 24 ساعة
+// إعداد التخزين المؤقت (Cache)
 const cache = new NodeCache({ stdTTL: 86400, checkperiod: 600 });
 
-// إعدادات طلبات الشبكة لحماية السيرفر
+// إعدادات Axios للتخفي كمتصفح عادي
 const axiosInstance = axios.create({
   timeout: 10000,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
   }
 });
 
@@ -25,11 +26,11 @@ const axiosInstance = axios.create({
 app.get('/', (req, res) => {
   res.json({ 
     success: true, 
-    message: '🚀 OtakuHub Light Backend is Live & Ready!' 
+    message: '🚀 OtakuHub Light Backend is Ready!' 
   });
 });
 
-// نقطة جلب الحلقة واستخراج الروابط
+// نقطة جلب الحلقة
 app.get('/api/get-episode', async (req, res) => {
   try {
     const { anime, episode } = req.query;
@@ -37,7 +38,7 @@ app.get('/api/get-episode', async (req, res) => {
     if (!anime || !episode) {
       return res.status(400).json({ 
         success: false, 
-        error: 'يرجى تزويد اسم الأنمي ورقم الحلقة بشكل صحيح.' 
+        error: 'يرجى تزويد اسم الأنمي ورقم الحلقة.' 
       });
     }
 
@@ -48,29 +49,32 @@ app.get('/api/get-episode', async (req, res) => {
     // 1. التحقق من التخزين المؤقت
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
-      console.log(`⚡ تم إرجاع البيانات من Cache: ${cacheKey}`);
+      console.log(`⚡ البيانات من Cache: ${cacheKey}`);
       return res.json({ ...cachedData, fromCache: true });
     }
 
-    // 2. رابط الصفحة المستهدفة (يمكن تعديل النمط حسب الموقع المصدر)
-    const targetUrl = `https://example-anime-site.com/watch/${cleanAnime}-episode-${cleanEpisode}`;
+    // 2. تجربة رابط الموقع البسيط (مثال: AnimeLek)
+    const targetUrl = `https://animelek.me/episode/${cleanAnime}-الحلقة-${cleanEpisode}/`;
 
-    // 3. جلب محتوى HTML بواسطة Axios
+    console.log(`🔍 جاري جلب الصفحة من: ${targetUrl}`);
+
+    // 3. طلب كود الـ HTML
     const response = await axiosInstance.get(targetUrl);
     const html = response.data;
 
-    // 4. تحليل الصفحة بواسطة Cheerio واستخراج الروابط
+    // 4. استخراج الروابط باستخدام Cheerio
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    // استخراج سيرفرات المشاهدة والتحميل من العناصر (حسب وسوم الموقع المصدر)
+    // البحث عن سيرفرات المشاهدة داخل الصفحة
     $('iframe').each((index, element) => {
-      const src = $(element).attr('src');
+      let src = $(element).attr('src') \vert{}\vert{}$(element).attr('data-src');
       if (src) {
+        if (src.startsWith('//')) src = `https:${src}`;
         extractedServers.push({
           id: index + 1,
           name: `Server ${index + 1}`,
-          url: src.startsWith('//') ? `https:${src}` : src
+          url: src
         });
       }
     });
@@ -82,20 +86,18 @@ app.get('/api/get-episode', async (req, res) => {
       serversCount: extractedServers.length,
       servers: extractedServers,
       message: extractedServers.length > 0 
-        ? 'تم جلب سيرفرات الحلقة بنجاح 🎬' 
-        : 'لم يتم العثور على سيرفرات مباشرة في هذه الصفحة.'
+        ? 'تم استخراج سيرفرات المشاهدة بنجاح 🎬' 
+        : 'تم فتح الصفحة ولكن لم نجد سيرفرات مباشرة بها.'
     };
 
-    // حفظ النتيجة في Cache
     cache.set(cacheKey, responseData);
-
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
     console.error('Error fetching episode:', error.message);
     return res.status(500).json({ 
       success: false, 
-      error: 'حدث خطأ أثناء جلب الحلقة، أو أن الحلقة غير موجودة.' 
+      error: 'تعذر جلب الحلقة من الموقع البسيط. قد تكون الحلقة غير موجودة أو أن رابط الصفحة مختلف.' 
     });
   }
 });
