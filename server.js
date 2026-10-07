@@ -30,7 +30,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// نقطة جلب الحلقة للموقع الجديد
+// نقطة جلب عامة تقبل أي رابط يتم إرساله
 app.get('/api/get-episode', async (req, res) => {
   try {
     const { url } = req.query;
@@ -38,7 +38,7 @@ app.get('/api/get-episode', async (req, res) => {
     if (!url) {
       return res.status(400).json({ 
         success: false, 
-        error: 'يرجى تزويد رابط صفحة الأنمي أو الحلقة المطلوبة.' 
+        error: 'يرجى تزويد الرابط المطلوب باستخدام معامل ?url=' 
       });
     }
 
@@ -62,27 +62,37 @@ app.get('/api/get-episode', async (req, res) => {
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    // استخراج السيرفرات أو مشغلات الفيديو من الصفحة
-    $('iframe, video source').each((index, element) => {
-      let src = $(element).attr('src') \vert{}\vert{}$(element).attr('data-src');
-      if (src) {
+    // استخراج كافة الروابط والـ iframe أو مصادر الفيديو المتاحة بالصفحة
+    $('iframe, video source, a').each((index, element) => {
+      let src = $(element).attr('src') || $(element).attr('data-src') \vert{}\vert{}$(element).attr('href');
+      if (src && (src.includes('http') || src.startsWith('//'))) {
         if (src.startsWith('//')) src = `https:${src}`;
-        extractedServers.push({
-          id: index + 1,
-          name: `Server ${index + 1}`,
-          url: src
-        });
+        
+        // تصفية الروابط غير المرغوبة (مثل روابط الموقع الداخلية والروابط العامة) والتركيز على السيرفرات
+        if (!src.includes('animedar.net') && !src.includes('facebook') && !src.includes('twitter')) {
+          extractedServers.push({
+            id: extractedServers.length + 1,
+            name: `Server ${extractedServers.length + 1}`,
+            url: src
+          });
+        }
       }
     });
+
+    // إزالة التكرارات في الروابط المستخرجة
+    const uniqueServers = Array.from(new Set(extractedServers.map(s => s.url)))
+      .map(url => {
+        return extractedServers.find(s => s.url === url);
+      });
 
     const responseData = {
       success: true,
       targetUrl: url,
-      serversCount: extractedServers.length,
-      servers: extractedServers,
-      message: extractedServers.length > 0 
-        ? 'تم استخراج سيرفرات المشاهدة بنجاح 🎬' 
-        : 'تم فتح الصفحة بنجاح ولكن لم نجد سيرفرات مباشرة.'
+      serversCount: uniqueServers.length,
+      servers: uniqueServers,
+      message: uniqueServers.length > 0 
+        ? 'تم استخراج الروابط والسيرفرات بنجاح 🎬' 
+        : 'تم فتح الصفحة بنجاح ولكن لم يتم العثور على روابط وسائط مباشرة.'
     };
 
     cache.set(cacheKey, responseData);
@@ -95,7 +105,7 @@ app.get('/api/get-episode', async (req, res) => {
     return res.status(500).json({ 
       success: false, 
       statusCode: statusCode,
-      error: 'تعذر جلب الصفحة عبر الوسيط. يرجى التحقق من صحة الرابط.' 
+      error: 'تعذر جلب الصفحة عبر الوسيط. يرجى التحقق من صحة الرابط المدخل.' 
     });
   }
 });
