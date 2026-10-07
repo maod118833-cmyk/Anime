@@ -59,20 +59,23 @@ app.get('/api/get-episode', async (req, res) => {
     page = await browser.newPage();
 
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
-    await page.goto(finalUrl, { waitUntil: 'networkidle2', timeout: 35000 });
+    await page.goto(finalUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+
+    // الانتظار لبضع ثوانٍ لضمان اكتمال تحميل عناصر الصفحة الأوليّة
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     let serversList = [];
 
-    // 🔄 استخراج جميع السيرفرات والمشغلات المتاحة في الصفحة
+    // 🔄 محاولة استخراج السيرفرات والمشغلات بجميع الطرق الممكنة
     for (let attempt = 1; attempt <= 3; attempt++) {
       serversList = await page.evaluate(() => {
         const results = [];
+        
+        // 1. البحث عن كافة الـ iframes الموجودة
         const iframes = Array.from(document.querySelectorAll('iframe'));
-
         iframes.forEach((iframe, index) => {
           const src = iframe.src || iframe.getAttribute('data-src') || iframe.getAttribute('src');
           if (src && (src.includes('embed') || src.includes('player') || src.includes('stream') || src.startsWith('http'))) {
-            // التمييز الافتراضي للسيرفر بناءً على الرابط أو الترتيب
             let name = `Server ${index + 1}`;
             if (src.includes('4shared')) name = '4Shared Server';
             else if (src.includes('dood') || src.includes('ds251')) name = 'DoodStream';
@@ -87,11 +90,29 @@ app.get('/api/get-episode', async (req, res) => {
           }
         });
 
+        // 2. البحث داخل الأزرار والعناصر القابلة بالنقر (Server Buttons)
+        const buttons = Array.from(document.querySelectorAll('button, a, [data-url], [data-src]'));
+        buttons.forEach((btn, index) => {
+          const dataUrl = btn.getAttribute('data-url') || btn.getAttribute('data-src') || btn.getAttribute('href');
+          const btnText = btn.innerText ? btn.innerText.trim() : '';
+
+          if (dataUrl && (dataUrl.startsWith('http') || dataUrl.includes('embed') || dataUrl.includes('player'))) {
+            // تجنب تكرار نفس الرابط
+            if (!results.some(item => item.url === dataUrl)) {
+              results.push({
+                name: btnText || `Server ${results.length + 1}`,
+                url: dataUrl,
+                quality: 'Auto'
+              });
+            }
+          }
+        });
+
         return results;
       });
 
       if (serversList.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     await page.close();
