@@ -4,7 +4,7 @@ const cheerio = require('cheerio');
 const NodeCache = require('node-cache');
 
 const app = express();
-const cache = new NodeCache({ stdTTL: 86400 }); // تخزين مؤقت لمدة 24 ساعة
+const cache = new NodeCache({ stdTTL: 86400 });
 const PORT = process.env.PORT || 3000;
 
 app.get('/api/get-episode', async (req, res) => {
@@ -32,10 +32,19 @@ app.get('/api/get-episode', async (req, res) => {
         const $ = cheerio.load(html);
         const servers = [];
 
-        // استخراج الروابط بالشكل الصحيح والسليم
         $('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a').each((index, element) => {
-            const src = $(element).attr('src') \vert{}\vert{}$(element).attr('href');
-            const name = $(element).text().trim() \vert{}\vert{}$(element).attr('data-name') || `Server ${index + 1}`;
+            let src = $(element).attr('src');
+            if (!src) {
+                src = $(element).attr('href');
+            }
+            
+            let name = $(element).text().trim();
+            if (!name) {
+                name = $(element).attr('data-name');
+            }
+            if (!name) {
+                name = 'Server ' + (index + 1);
+            }
             
             if (src && src.startsWith('http')) {
                 servers.push({ name, url: src });
@@ -66,5 +75,5 @@ app.get('/api/get-episode', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log('Server is running on port ' + PORT);
 });
