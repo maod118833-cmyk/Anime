@@ -53,7 +53,7 @@ app.get('/api/get-episode', async (req, res) => {
       return res.json({ ...cachedData, fromCache: true });
     }
 
-    // 2. تجربة رابط الموقع البسيط (مثال: AnimeLek)
+    // 2. تجربة رابط الموقع البسيط
     const targetUrl = `https://animelek.me/episode/${cleanAnime}-الحلقة-${cleanEpisode}/`;
 
     console.log(`🔍 جاري جلب الصفحة من: ${targetUrl}`);
@@ -66,7 +66,6 @@ app.get('/api/get-episode', async (req, res) => {
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    // البحث عن سيرفرات المشاهدة داخل الصفحة
     $('iframe').each((index, element) => {
       let src = $(element).attr('src') \vert{}\vert{}$(element).attr('data-src');
       if (src) {
@@ -94,10 +93,15 @@ app.get('/api/get-episode', async (req, res) => {
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    console.error('Error fetching episode:', error.message);
+    // طباعة رمز الخطأ والتفاصيل لمعرفة السبب بدقة
+    const statusCode = error.response ? error.response.status : 'لا يوجد استجابة';
+    console.error(`❌ خطأ أثناء الجلب (${statusCode}):`, error.message);
+
     return res.status(500).json({ 
       success: false, 
-      error: 'تعذر جلب الحلقة من الموقع البسيط. قد تكون الحلقة غير موجودة أو أن رابط الصفحة مختلف.' 
+      statusCode: statusCode,
+      details: error.message,
+      error: 'تعذر جلب الحلقة من الموقع. يرجى التحقق من وجود الحلقة أو رمز الخطأ.' 
     });
   }
 });
