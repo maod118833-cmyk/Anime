@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const cheerio = require('cheerio');
 const NodeCache = require('node-cache');
 
 const app = express();
@@ -9,31 +10,30 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// إعداد التخزين المؤقت: الاحتفاظ بالبيانات لمدة 24 ساعة (86400 ثانية)
+// إعداد التخزين المؤقت (Cache) لمدة 24 ساعة
 const cache = new NodeCache({ stdTTL: 86400, checkperiod: 600 });
 
-// إعدادات طلبات الشبكة مع مهلة زمنية (Timeout) لحماية السيرفر
+// إعدادات طلبات الشبكة لحماية السيرفر
 const axiosInstance = axios.create({
-  timeout: 10000, // مهلة 10 ثوانٍ كحد أقصى
+  timeout: 10000,
   headers: {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   }
 });
 
-// 1. الصفحة الرئيسية للتأكد من تشغيل السيرفر
+// الصفحة الرئيسية
 app.get('/', (req, res) => {
   res.json({ 
     success: true, 
-    message: '🚀 OtakuHub Light Backend with Cache & Protection is Running!' 
+    message: '🚀 OtakuHub Light Backend is Live & Ready!' 
   });
 });
 
-// 2. نقطة جلب الحلقة مع معالجة الأخطاء والتخزين المؤقت
+// نقطة جلب الحلقة واستخراج الروابط
 app.get('/api/get-episode', async (req, res) => {
   try {
     const { anime, episode } = req.query;
 
-    // معالجة الأخطاء: التحقق من وجود المدخلات
     if (!anime || !episode) {
       return res.status(400).json({ 
         success: false, 
@@ -41,51 +41,65 @@ app.get('/api/get-episode', async (req, res) => {
       });
     }
 
-    // تنظيف المدخلات
-    const cleanAnime = String(anime).trim().toLowerCase();
+    const cleanAnime = String(anime).trim().toLowerCase().replace(/\s+/g, '-');
     const cleanEpisode = String(episode).trim();
-
-    // إنشاء مفتاح فريد للتخزين المؤقت
     const cacheKey = `ep_${cleanAnime}_${cleanEpisode}`;
 
-    // التحقق ممّا إذا كانت الحلقة مخرّنة مسبقاً في الذاكرة (Cache)
+    // 1. التحقق من التخزين المؤقت
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
-      console.log(`⚡ تم إرجاع البيانات من التخزين المؤقت لـ: ${cacheKey}`);
-      return res.json({
-        ...cachedData,
-        fromCache: true
-      });
+      console.log(`⚡ تم إرجاع البيانات من Cache: ${cacheKey}`);
+      return res.json({ ...cachedData, fromCache: true });
     }
 
-    // بناء كائن النتيجة (سيتم إضافة جلب الروابط الحقيقية هنا في الخطوة القادمة)
+    // 2. رابط الصفحة المستهدفة (يمكن تعديل النمط حسب الموقع المصدر)
+    const targetUrl = `https://example-anime-site.com/watch/${cleanAnime}-episode-${cleanEpisode}`;
+
+    // 3. جلب محتوى HTML بواسطة Axios
+    const response = await axiosInstance.get(targetUrl);
+    const html = response.data;
+
+    // 4. تحليل الصفحة بواسطة Cheerio واستخراج الروابط
+    const $ = cheerio.load(html);
+    const extractedServers = [];
+
+    // استخراج سيرفرات المشاهدة والتحميل من العناصر (حسب وسوم الموقع المصدر)
+    $('iframe').each((index, element) => {
+      const src = $(element).attr('src');
+      if (src) {
+        extractedServers.push({
+          id: index + 1,
+          name: `Server ${index + 1}`,
+          url: src.startsWith('//') ? `https:${src}` : src
+        });
+      }
+    });
+
     const responseData = {
       success: true,
       anime: cleanAnime,
       episode: cleanEpisode,
-      servers: [],
-      message: 'تم تجهيز نظام التخزين المؤقت والحماية بنجاح ⚡'
+      serversCount: extractedServers.length,
+      servers: extractedServers,
+      message: extractedServers.length > 0 
+        ? 'تم جلب سيرفرات الحلقة بنجاح 🎬' 
+        : 'لم يتم العثور على سيرفرات مباشرة في هذه الصفحة.'
     };
 
-    // حفظ النتيجة في التخزين المؤقت
+    // حفظ النتيجة في Cache
     cache.set(cacheKey, responseData);
 
-    return res.json({
-      ...responseData,
-      fromCache: false
-    });
+    return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    // معالجة أخطاء السيرفر لمنع انهياره
-    console.error('Error handling request:', error.message);
+    console.error('Error fetching episode:', error.message);
     return res.status(500).json({ 
       success: false, 
-      error: 'حدث خطأ داخلي في السيرفر، يرجى المحاولة لاحقاً.' 
+      error: 'حدث خطأ أثناء جلب الحلقة، أو أن الحلقة غير موجودة.' 
     });
   }
 });
 
-// 3. تشغيل الخادم
 app.listen(PORT, () => {
-  console.log(`Server running with Cache on port ${PORT} ⚡`);
+  console.log(`Server running on port ${PORT} ⚡`);
 });
