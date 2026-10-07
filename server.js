@@ -8,27 +8,36 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// الصفحة الرئيسية للتأكد من عمل السيرفر
+// 1. الصفحة الرئيسية للتأكد من تشغيل السيرفر
 app.get('/', (req, res) => {
   res.json({ success: true, message: '🚀 OtakuHub Light Backend is Running!' });
 });
 
-// نقطة جلب الحلقة
+// 2. نقطة جلب الحلقة والروابط
 app.get('/api/get-episode', async (req, res) => {
   const { anime, episode } = req.query;
 
   if (!anime || !episode) {
-    return res.status(400).json({ success: false, error: 'يرجى تقديم اسم الأنمي ورقم الحلقة.' });
+    return res.status(400).json({ 
+      success: false, 
+      error: 'يرجى تزويد اسم الأنمي ورقم الحلقة.' 
+    });
   }
 
   try {
-    // سنقوم بإضافة المنطق المباشر للجلب هنا
-    res.json({ success: true, message: 'جاهز لإضافة مصدر البيانات المباشر' });
+    // سنضع منطق جلب سيرفرات المشاهدة المباشرة بـ axios هنا
+    res.json({ 
+      success: true, 
+      anime: anime,
+      episode: episode,
+      message: 'السيرفر جاهز ومرتبط بالمكتبات الخفيفة بنجاح ⚡' 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// 3. تشغيل الخادم
 app.listen(PORT, () => {
-  console.log(`Server is running smoothly on port ${PORT} ⚡`);
+  console.log(`Server running smoothly on port ${PORT} ⚡`);
 });
