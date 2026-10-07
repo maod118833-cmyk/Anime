@@ -9,7 +9,6 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-
 const cache = new NodeCache({ stdTTL: 86400, checkperiod: 600 });
 
 const axiosInstance = axios.create({
@@ -39,7 +38,6 @@ app.get('/api/get-episode', async (req, res) => {
     }
 
     const cacheKey = `animedar_${url}`;
-
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
       return res.json({ ...cachedData, fromCache: true });
@@ -52,26 +50,32 @@ app.get('/api/get-episode', async (req, res) => {
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    // استخراج الروابط بالشكل الصحيح والسليم برمجياً
+    // طريقة آمنة لاستخراج الروابط وتجنب أي أخطاء في العناصر
     $('iframe, video source, a').each((index, element) => {
-      let src = $(element).attr('src') || $(element).attr('data-src') \vert{}\vert{}$(element).attr('href');
-      if (src && (src.includes('http') || src.startsWith('//'))) {
-        if (src.startsWith('//')) src = `https:${src}`;
+      try {
+        const el = $(element);
+        let src = el.attr('src') || el.attr('data-src') || el.attr('href');
         
-        if (!src.includes('animedar.net') && !src.includes('facebook') && !src.includes('twitter')) {
-          extractedServers.push({
-            id: extractedServers.length + 1,
-            name: `Server ${extractedServers.length + 1}`,
-            url: src
-          });
+        if (src && typeof src === 'string') {
+          if (src.startsWith('//')) {
+            src = `https:${src}`;
+          }
+          
+          if (src.includes('http') && !src.includes('animedar.net') && !src.includes('facebook') && !src.includes('twitter')) {
+            extractedServers.push({
+              id: extractedServers.length + 1,
+              name: `Server ${extractedServers.length + 1}`,
+              url: src
+            });
+          }
         }
+      } catch (err) {
+        // تخطي أي عنصر تالف دون إيقاف الخادم
       }
     });
 
     const uniqueServers = Array.from(new Set(extractedServers.map(s => s.url)))
-      .map(url => {
-        return extractedServers.find(s => s.url === url);
-      });
+      .map(url => extractedServers.find(s => s.url === url));
 
     const responseData = {
       success: true,
@@ -87,7 +91,7 @@ app.get('/api/get-episode', async (req, res) => {
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    const statusCode = error.response ? error.response.status : 'Error';
+    const statusCode = error.response ? error.response.status : 500;
     return res.status(500).json({ 
       success: false, 
       statusCode: statusCode,
