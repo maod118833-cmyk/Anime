@@ -13,15 +13,12 @@ const PORT = process.env.PORT || 3000;
 // إعداد التخزين المؤقت (Cache)
 const cache = new NodeCache({ stdTTL: 86400, checkperiod: 600 });
 
-// إعدادات Axios متقدمة تحاكي متصفح حقيقي لتفادي الحظر
+// إعدادات Axios
 const axiosInstance = axios.create({
   timeout: 15000,
   headers: {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
-    'Referer': 'https://animelek.me/',
-    'Connection': 'keep-alive'
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
   }
 });
 
@@ -29,11 +26,11 @@ const axiosInstance = axios.create({
 app.get('/', (req, res) => {
   res.json({ 
     success: true, 
-    message: '🚀 OtakuHub Optimized Backend is Ready!' 
+    message: '🚀 OtakuHub Proxy Backend is Ready!' 
   });
 });
 
-// نقطة جلب الحلقة المحسنة
+// نقطة جلب الحلقة عبر الوسيط
 app.get('/api/get-episode', async (req, res) => {
   try {
     const { anime, episode } = req.query;
@@ -47,7 +44,7 @@ app.get('/api/get-episode', async (req, res) => {
 
     const cleanAnime = String(anime).trim().toLowerCase().replace(/\s+/g, '-');
     const cleanEpisode = String(episode).trim();
-    const cacheKey = `ep_${cleanAnime}_${cleanEpisode}`;
+    const cacheKey = `ep_proxy_${cleanAnime}_${cleanEpisode}`;
 
     // 1. التحقق من التخزين المؤقت
     const cachedData = cache.get(cacheKey);
@@ -56,11 +53,13 @@ app.get('/api/get-episode', async (req, res) => {
       return res.json({ ...cachedData, fromCache: true });
     }
 
-    // 2. محاولة تجربة رابط بديل أو صيغة مختلفة للموقع
+    // 2. توجيه الطلب عبر الوسيط لتجاوز الحظر
     const targetUrl = `https://animelek.me/episode/${cleanAnime}-الحلقة-${cleanEpisode}/`;
-    console.log(`🔍 جاري المحاولة مع الرابط: ${targetUrl}`);
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
 
-    const response = await axiosInstance.get(targetUrl);
+    console.log(`🔍 جاري الجلب عبر الوسيط لـ: ${targetUrl}`);
+
+    const response = await axiosInstance.get(proxyUrl);
     const html = response.data;
 
     const $ = cheerio.load(html);
@@ -86,21 +85,21 @@ app.get('/api/get-episode', async (req, res) => {
       serversCount: extractedServers.length,
       servers: extractedServers,
       message: extractedServers.length > 0 
-        ? 'تم استخراج سيرفرات المشاهدة بنجاح 🎬' 
-        : 'تم فتح الصفحة ولكن لم نجد سيرفرات.'
+        ? 'تم استخراج سيرفرات المشاهدة بنجاح عبر الوسيط 🎬' 
+        : 'تم فتح الصفحة عبر الوسيط ولكن لم نجد سيرفرات مباشرة.'
     };
 
     cache.set(cacheKey, responseData);
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    const statusCode = error.response ? error.response.status : 'Network Error';
-    console.error(`❌ خطأ (${statusCode}):`, error.message);
+    const statusCode = error.response ? error.response.status : 'Proxy Error';
+    console.error(`❌ خطأ عبر الوسيط (${statusCode}):`, error.message);
 
     return res.status(500).json({ 
       success: false, 
       statusCode: statusCode,
-      error: 'تعذر جلب الحلقة. الموقع المصدر قد يحظر الطلبات المباشرة.' 
+      error: 'تعذر جلب الحلقة حتى عبر الوسيط. يرجى التحقق من الرابط.' 
     });
   }
 });
