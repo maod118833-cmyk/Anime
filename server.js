@@ -26,25 +26,23 @@ const axiosInstance = axios.create({
 app.get('/', (req, res) => {
   res.json({ 
     success: true, 
-    message: '🚀 OtakuHub Proxy Backend is Ready!' 
+    message: '🚀 OtakuHub Animedar Proxy Backend is Ready!' 
   });
 });
 
-// نقطة جلب الحلقة عبر الوسيط
+// نقطة جلب الحلقة للموقع الجديد
 app.get('/api/get-episode', async (req, res) => {
   try {
-    const { anime, episode } = req.query;
+    const { url } = req.query;
 
-    if (!anime || !episode) {
+    if (!url) {
       return res.status(400).json({ 
         success: false, 
-        error: 'يرجى تزويد اسم الأنمي ورقم الحلقة.' 
+        error: 'يرجى تزويد رابط صفحة الأنمي أو الحلقة المطلوبة.' 
       });
     }
 
-    const cleanAnime = String(anime).trim().toLowerCase().replace(/\s+/g, '-');
-    const cleanEpisode = String(episode).trim();
-    const cacheKey = `ep_proxy_${cleanAnime}_${cleanEpisode}`;
+    const cacheKey = `animedar_${url}`;
 
     // 1. التحقق من التخزين المؤقت
     const cachedData = cache.get(cacheKey);
@@ -53,11 +51,10 @@ app.get('/api/get-episode', async (req, res) => {
       return res.json({ ...cachedData, fromCache: true });
     }
 
-    // 2. توجيه الطلب عبر الوسيط لتجاوز الحظر
-    const targetUrl = `https://animelek.me/episode/${cleanAnime}-الحلقة-${cleanEpisode}/`;
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+    // 2. استخدام الوسيط لجلب الصفحة المستهدفة بأمان
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
 
-    console.log(`🔍 جاري الجلب عبر الوسيط لـ: ${targetUrl}`);
+    console.log(`🔍 جاري الجلب عبر الوسيط لـ: ${url}`);
 
     const response = await axiosInstance.get(proxyUrl);
     const html = response.data;
@@ -65,7 +62,7 @@ app.get('/api/get-episode', async (req, res) => {
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    // استخراج السيرفرات
+    // استخراج السيرفرات أو مشغلات الفيديو من الصفحة
     $('iframe, video source').each((index, element) => {
       let src = $(element).attr('src') \vert{}\vert{}$(element).attr('data-src');
       if (src) {
@@ -80,26 +77,25 @@ app.get('/api/get-episode', async (req, res) => {
 
     const responseData = {
       success: true,
-      anime: cleanAnime,
-      episode: cleanEpisode,
+      targetUrl: url,
       serversCount: extractedServers.length,
       servers: extractedServers,
       message: extractedServers.length > 0 
-        ? 'تم استخراج سيرفرات المشاهدة بنجاح عبر الوسيط 🎬' 
-        : 'تم فتح الصفحة عبر الوسيط ولكن لم نجد سيرفرات مباشرة.'
+        ? 'تم استخراج سيرفرات المشاهدة بنجاح 🎬' 
+        : 'تم فتح الصفحة بنجاح ولكن لم نجد سيرفرات مباشرة.'
     };
 
     cache.set(cacheKey, responseData);
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    const statusCode = error.response ? error.response.status : 'Proxy Error';
-    console.error(`❌ خطأ عبر الوسيط (${statusCode}):`, error.message);
+    const statusCode = error.response ? error.response.status : 'Error';
+    console.error(`❌ خطأ أثناء الجلب (${statusCode}):`, error.message);
 
     return res.status(500).json({ 
       success: false, 
       statusCode: statusCode,
-      error: 'تعذر جلب الحلقة حتى عبر الوسيط. يرجى التحقق من الرابط.' 
+      error: 'تعذر جلب الصفحة عبر الوسيط. يرجى التحقق من صحة الرابط.' 
     });
   }
 });
