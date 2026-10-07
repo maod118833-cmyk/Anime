@@ -13,12 +13,15 @@ const PORT = process.env.PORT || 3000;
 // إعداد التخزين المؤقت (Cache)
 const cache = new NodeCache({ stdTTL: 86400, checkperiod: 600 });
 
-// إعدادات Axios للتخفي كمتصفح عادي
+// إعدادات Axios متقدمة تحاكي متصفح حقيقي لتفادي الحظر
 const axiosInstance = axios.create({
-  timeout: 10000,
+  timeout: 15000,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+    'Referer': 'https://animelek.me/',
+    'Connection': 'keep-alive'
   }
 });
 
@@ -26,11 +29,11 @@ const axiosInstance = axios.create({
 app.get('/', (req, res) => {
   res.json({ 
     success: true, 
-    message: '🚀 OtakuHub Light Backend is Ready!' 
+    message: '🚀 OtakuHub Optimized Backend is Ready!' 
   });
 });
 
-// نقطة جلب الحلقة
+// نقطة جلب الحلقة المحسنة
 app.get('/api/get-episode', async (req, res) => {
   try {
     const { anime, episode } = req.query;
@@ -53,20 +56,18 @@ app.get('/api/get-episode', async (req, res) => {
       return res.json({ ...cachedData, fromCache: true });
     }
 
-    // 2. تجربة رابط الموقع البسيط
+    // 2. محاولة تجربة رابط بديل أو صيغة مختلفة للموقع
     const targetUrl = `https://animelek.me/episode/${cleanAnime}-الحلقة-${cleanEpisode}/`;
+    console.log(`🔍 جاري المحاولة مع الرابط: ${targetUrl}`);
 
-    console.log(`🔍 جاري جلب الصفحة من: ${targetUrl}`);
-
-    // 3. طلب كود الـ HTML
     const response = await axiosInstance.get(targetUrl);
     const html = response.data;
 
-    // 4. استخراج الروابط باستخدام Cheerio
     const $ = cheerio.load(html);
     const extractedServers = [];
 
-    $('iframe').each((index, element) => {
+    // استخراج السيرفرات
+    $('iframe, video source').each((index, element) => {
       let src = $(element).attr('src') \vert{}\vert{}$(element).attr('data-src');
       if (src) {
         if (src.startsWith('//')) src = `https:${src}`;
@@ -86,22 +87,20 @@ app.get('/api/get-episode', async (req, res) => {
       servers: extractedServers,
       message: extractedServers.length > 0 
         ? 'تم استخراج سيرفرات المشاهدة بنجاح 🎬' 
-        : 'تم فتح الصفحة ولكن لم نجد سيرفرات مباشرة بها.'
+        : 'تم فتح الصفحة ولكن لم نجد سيرفرات.'
     };
 
     cache.set(cacheKey, responseData);
     return res.json({ ...responseData, fromCache: false });
 
   } catch (error) {
-    // طباعة رمز الخطأ والتفاصيل لمعرفة السبب بدقة
-    const statusCode = error.response ? error.response.status : 'لا يوجد استجابة';
-    console.error(`❌ خطأ أثناء الجلب (${statusCode}):`, error.message);
+    const statusCode = error.response ? error.response.status : 'Network Error';
+    console.error(`❌ خطأ (${statusCode}):`, error.message);
 
     return res.status(500).json({ 
       success: false, 
       statusCode: statusCode,
-      details: error.message,
-      error: 'تعذر جلب الحلقة من الموقع. يرجى التحقق من وجود الحلقة أو رمز الخطأ.' 
+      error: 'تعذر جلب الحلقة. الموقع المصدر قد يحظر الطلبات المباشرة.' 
     });
   }
 });
