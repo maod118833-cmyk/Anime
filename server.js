@@ -32,7 +32,7 @@ app.get('/api/get-episode', async (req, res) => {
         const $ = cheerio.load(html);
         const servers = [];
 
-        // استخراج الروابط بشكل سليم
+        // استخراج الروابط بالشكل الصحيح والسليم
         $('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a').each((index, element) => {
             const src = $(element).attr('src') \vert{}\vert{}$(element).attr('href');
             const name = $(element).text().trim() \vert{}\vert{}$(element).attr('data-name') || `Server ${index + 1}`;
