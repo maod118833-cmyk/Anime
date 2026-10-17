@@ -1,16 +1,17 @@
 {
   "name": "anime-backend",
   "version": "1.0.0",
-  "description": "Anime Scraper Backend using Puppeteer",
+  "description": "Anime Scraper Backend using Axios and Cheerio",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "node-cache": "^5.1.2",
-    "puppeteer": "^22.6.0"
+    "node-cache": "^5.1.2"
   },
   "engines": {
     "node": ">=18.0.0"
