@@ -1,5 +1,6 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const axios = require('axios');
+const cheerio = require('cheerio');
 const NodeCache = require('node-cache');
 
 const app = express();
@@ -17,57 +18,27 @@ app.get('/api/get-episode', async (req, res) => {
         return res.json({ success: true, source: 'cache', data: cache.get(targetUrl) });
     }
 
-    let browser = null;
-
     try {
-        // تشغيل المتصفح مع إعدادات متوافقة تماماً مع Linux و Render
-        browser = await puppeteer.launch({
-            headless: true,
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
+        const response = await axios.get(targetUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+            },
+            timeout: 15000
         });
 
-        const page = await browser.newPage();
+        const html = response.data;
+        const $ = cheerio.load(html);
+        const servers = [];
 
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-        await page.goto(targetUrl, {
-            waitUntil: 'networkidle2',
-            timeout: 60000
+        $('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a, .play-video a').each((index, element) => {
+            let src = $(element).attr('src') || $(element).attr('href');
+            let name = $(element).text().trim() || $(element).attr('data-name') || ('Server ' + (index + 1));
+            
+            if (src && src.startsWith('http')) {
+                servers.push({ name, url: src });
+            }
         });
-
-        const servers = await page.evaluate(() => {
-            const elements = document.querySelectorAll('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a');
-            const results = [];
-
-            elements.forEach((element, index) => {
-                let src = element.getAttribute('src') || element.getAttribute('href');
-                let name = element.innerText ? element.innerText.trim() : null;
-                if (!name) {
-                    name = element.getAttribute('data-name');
-                }
-                if (!name) {
-                    name = 'Server ' + (index + 1);
-                }
-
-                if (src && src.startsWith('http')) {
-                    results.push({ name, url: src });
-                }
-            });
-
-            return results;
-        });
-
-        await browser.close();
 
         const uniqueServers = Array.from(new Set(servers.map(s => s.url)))
             .map(url => servers.find(s => s.url === url));
@@ -83,14 +54,11 @@ app.get('/api/get-episode', async (req, res) => {
         return res.json({ success: true, source: 'live', data: resultData });
 
     } catch (error) {
-        if (browser) {
-            await browser.close();
-        }
-        console.error('Puppeteer Error Details:', error);
+        console.error('Scraping Error:', error.message);
         return res.status(500).json({ 
             success: false, 
             statusCode: 500, 
-            error: 'تعذر جلب الصفحة عبر المتصفح الوهمي.',
+            error: 'تعذر جلب البيانات. يرجى التحقق من الرابط.',
             details: error.message 
         });
     }
