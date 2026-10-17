@@ -1,6 +1,5 @@
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 const NodeCache = require('node-cache');
 
 const app = express();
@@ -18,39 +17,60 @@ app.get('/api/get-episode', async (req, res) => {
         return res.json({ success: true, source: 'cache', data: cache.get(targetUrl) });
     }
 
+    let browser = null;
+
     try {
-        const response = await axios.get(targetUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
-                'Referer': 'https://animedar.net/'
-            },
-            timeout: 10000
+        // تشغيل متصفح Puppeteer بخيارات متوافقة مع الاستضافات السحابية مثل Render
+        browser = await puppeteer.launch({
+            headless: 'new',
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu'
+            ]
         });
 
-        const html = response.data;
-        const $ = cheerio.load(html);
-        const servers = [];
+        const page = await browser.newPage();
 
-        $('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a').each((index, element) => {
-            let src = $(element).attr('src');
-            if (!src) {
-                src = $(element).attr('href');
-            }
-            
-            let name = $(element).text().trim();
-            if (!name) {
-                name = $(element).attr('data-name');
-            }
-            if (!name) {
-                name = 'Server ' + (index + 1);
-            }
-            
-            if (src && src.startsWith('http')) {
-                servers.push({ name, url: src });
-            }
+        // محاكاة متصفح حقيقي لتجاوز الحماية
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        await page.goto(targetUrl, {
+            waitUntil: 'networkidle2',
+            timeout: 60000
         });
 
+        // استخراج العناصر من الصفحة تماماً مثل Cheerio ولكن بعد تشغيل JavaScript بالكامل
+        const servers = await page.evaluate(() => {
+            const elements = document.querySelectorAll('iframe, video source, a.server-link, .watch-servers a, ul.servers-list li a');
+            const results = [];
+
+            elements.forEach((element, index) => {
+                let src = element.getAttribute('src') || element.getAttribute('href');
+                let name = element.innerText ? element.innerText.trim() : null;
+                if (!name) {
+                    name = element.getAttribute('data-name');
+                }
+                if (!name) {
+                    name = 'Server ' + (index + 1);
+                }
+
+                if (src && src.startsWith('http')) {
+                    results.push({ name, url: src });
+                }
+            });
+
+            return results;
+        });
+
+        await browser.close();
+
+        // تصفية الروابط المتكررة
         const uniqueServers = Array.from(new Set(servers.map(s => s.url)))
             .map(url => servers.find(s => s.url === url));
 
@@ -65,11 +85,14 @@ app.get('/api/get-episode', async (req, res) => {
         return res.json({ success: true, source: 'live', data: resultData });
 
     } catch (error) {
-        console.error('Scraping Error:', error.message);
+        if (browser) {
+            await browser.close();
+        }
+        console.error('Puppeteer Scraping Error:', error.message);
         return res.status(500).json({ 
             success: false, 
             statusCode: 500, 
-            error: 'تعذر جلب الصفحة عبر الوسيط. يرجى التحقق من صحة الرابط المدخل.' 
+            error: 'تعذر جلب الصفحة عبر المتصفح الوهمي. يرجى التحقق من صحة الرابط المدخل.' 
         });
     }
 });
